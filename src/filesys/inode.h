@@ -2,6 +2,7 @@
 #define FILESYS_INODE_H
 
 #include <stdbool.h>
+#include <list.h>
 #include "filesys/off_t.h"
 #include "devices/block.h"
 
@@ -19,5 +20,15 @@ off_t inode_write_at (struct inode *, const void *, off_t size, off_t offset);
 void inode_deny_write (struct inode *);
 void inode_allow_write (struct inode *);
 off_t inode_length (const struct inode *);
+
+struct cache_table_entry
+{
+	struct list_elem elem;
+	block_sector_t sector_idx;
+	char block[BLOCK_SECTOR_SIZE];
+	bool taken;
+	bool accessed;
+};
+
 
 #endif /* filesys/inode.h */
