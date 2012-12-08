@@ -334,7 +334,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
           block_read (fs_device, sector_idx, cache);
           memcpy (buffer + bytes_read, cache + sector_ofs, chunk_size);
         }
-        
+      free(cache);
 
       /* Advance. */
       size -= chunk_size;
@@ -402,6 +402,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
           memcpy (cache + sector_ofs, buffer + bytes_written, chunk_size);
           block_write (fs_device, sector_idx, cache);
         }
+        free(cache);
 
       /* Advance. */
       size -= chunk_size;
