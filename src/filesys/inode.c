@@ -12,17 +12,6 @@
 #define INODE_MAGIC 0x494e4f44
 #define MAX_CACHE 64
 
-/* On-disk inode.
-   Must be exactly BLOCK_SECTOR_SIZE bytes long. */
-struct inode_disk
-  {
-    block_sector_t start;               /* First data sector. */
-    off_t length;                       /* File size in bytes. */
-    unsigned magic;                     /* Magic number. */
-    uint32_t unused[125];               /* Not used. */
-  };
-
-
 /* Returns the number of sectors to allocate for an inode SIZE
    bytes long. */
 static inline size_t
@@ -39,7 +28,9 @@ struct inode
     int open_cnt;                       /* Number of openers. */
     bool removed;                       /* True if deleted, false otherwise. */
     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-    struct inode_disk data;             /* Inode content. */
+    unsigned magic;                     /* Magic number. */
+    off_t length;                       /* File size in bytes. */
+    block_sector_t start;               /* First data sector. */
   };
 
 /* Returns the block device sector that contains byte offset POS
@@ -50,8 +41,8 @@ static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
+  if (pos < inode->length)
+    return inode->start + pos / BLOCK_SECTOR_SIZE;
   else
     return -1;
 }
@@ -67,6 +58,7 @@ static int cache_hand = 0;
 void
 inode_init (void) 
 {
+	printf("init called\n");
   list_init (&open_inodes);
   list_init (&block_cache_table);
   int i;
@@ -87,35 +79,31 @@ inode_init (void)
 bool
 inode_create (block_sector_t sector, off_t length)
 {
-  struct inode_disk *disk_inode = NULL;
+  struct inode *curr = NULL;
   bool success = false;
 
   ASSERT (length >= 0);
 
-  /* If this assertion fails, the inode structure is not exactly
-     one sector in size, and you should fix that. */
-  ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
-
-  disk_inode = calloc (1, sizeof *disk_inode);
-  if (disk_inode != NULL)
+  curr = calloc (1, sizeof *curr);
+  if (curr != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
-      disk_inode->length = length;
-      disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start)) 
+      curr->length = length;
+      curr->magic = INODE_MAGIC;
+      if (free_map_allocate (sectors, &curr->start)) 
         {
-          block_write (fs_device, sector, disk_inode);
+          block_write (fs_device, sector, curr);
           if (sectors > 0) 
             {
               static char zeros[BLOCK_SECTOR_SIZE];
               size_t i;
               
               for (i = 0; i < sectors; i++) 
-                block_write (fs_device, disk_inode->start + i, zeros);
+                block_write (fs_device, curr->start + i, zeros);
             }
           success = true; 
         } 
-      free (disk_inode);
+      free (curr);
     }
   return success;
 }
@@ -128,6 +116,7 @@ inode_open (block_sector_t sector)
 {
   struct list_elem *e;
   struct inode *inode;
+  static char data[BLOCK_SECTOR_SIZE];
 
   /* Check whether this inode is already open. */
   for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
@@ -147,12 +136,21 @@ inode_open (block_sector_t sector)
     return NULL;
 
   /* Initialize. */
-  list_push_front (&open_inodes, &inode->elem);
+  block_read(fs_device,sector,data);
+  memcpy(inode,data,sizeof(*inode));
+  list_push_back (&open_inodes, &inode->elem);
+        /*for(e = list_begin(&open_inodes); e != list_end(&open_inodes); e = list_next(e))
+        {
+        	struct inode* curr = list_entry(e,struct inode,elem);
+        	printf("(in open) open_inode entry is %d\n",curr->sector);
+        }
+        printf("\n");*/
+  
+  //check validity of data
   inode->sector = sector;
   inode->open_cnt = 1;
-  inode->deny_write_cnt = 0;
-  inode->removed = false;
-  block_read (fs_device, inode->sector, &inode->data);
+  ASSERT(inode->deny_write_cnt == 0);
+  ASSERT(inode->removed == false);
   return inode;
 }
 
@@ -185,6 +183,14 @@ inode_close (struct inode *inode)
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
     {
+    	        struct list_elem *e;
+        /*for(e = list_begin(&open_inodes); e != list_end(&open_inodes); e = list_next(e))
+        {
+        	struct inode* curr = list_entry(e,struct inode,elem);
+        	printf("(in close) open_inode entry is %d\n",curr->sector);
+        }
+        printf("\n");*/
+
       /* Remove from inode list and release lock. */
       list_remove (&inode->elem);
  
@@ -192,8 +198,8 @@ inode_close (struct inode *inode)
       if (inode->removed) 
         {
           free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length)); 
+          free_map_release (inode->start,
+                            bytes_to_sectors (inode->length)); 
         }
 
       free (inode); 
@@ -437,5 +443,5 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  return inode->data.length;
+  return inode->length;
 }
