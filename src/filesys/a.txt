@@ -1,0 +1,217 @@
+diff --git a/src/filesys/inode.c b/src/filesys/inode.c
+index a4db163..8c5f5aa 100644
+--- a/src/filesys/inode.c
++++ b/src/filesys/inode.c
+@@ -13,6 +13,13 @@
+ #define MAX_CACHE 64
+ #define BLOCK_ENTRIES (BLOCK_SECTOR_SIZE/sizeof(block_sector_t))
+ 
++static char zeros[BLOCK_SECTOR_SIZE];
++static block_sector_t buf[BLOCK_ENTRIES]; //will map to the doubly indirect block
++static block_sector_t buf2[BLOCK_ENTRIES]; //will map to individual singly indirect blocks
++static int dbl_block_size = BLOCK_ENTRIES * BLOCK_SECTOR_SIZE;  	
++
++static void inode_expand (struct inode *curr, int num_blocks_to_add, int old_size);
++
+ 
+ /* In-memory inode. */
+ struct inode 
+@@ -32,21 +39,31 @@ struct inode
+    Returns -1 if INODE does not contain data for a byte at offset
+    POS. */
+ static block_sector_t
+-byte_to_sector (const struct inode *inode, off_t pos) 
++byte_to_sector (const struct inode *inode, off_t pos, bool seek) 
+ {
+   ASSERT (inode != NULL);
+-  if (pos < inode->length)
++  printf("byte_to_sector called seek %d for inode %d with dbl_indirect %d\n",seek,inode->sector,inode->dbl_indirect);
++  if (pos <= inode->length)
+   {
+-  	static block_sector_t buf[BLOCK_ENTRIES];
+-  	int dbl_block_size = BLOCK_ENTRIES * BLOCK_SECTOR_SIZE;
+   	int dbl_block_index = pos / dbl_block_size;
+   	int single_block_index = (pos - dbl_block_index*dbl_block_size) / BLOCK_SECTOR_SIZE;
+     block_read(fs_device,inode->dbl_indirect,buf);
+     block_read(fs_device,buf[dbl_block_index],buf);
+     return buf[single_block_index];
+   }
+-  else
++  else if(seek)
++  {
++  	printf("byte_to_sector returned -1 seek %d\n",seek);
+     return -1;
++  }
++  else
++  {
++  	struct inode *temp = (struct inode *) inode;
++  	inode_expand(temp,(pos - temp->length) / BLOCK_SECTOR_SIZE,temp->length);
++  	temp->length = pos;
++  	return byte_to_sector(inode,pos,false);
++  }
++  	
+ }
+ 
+ /* List of open inodes, so that opening a single inode twice
+@@ -55,10 +72,6 @@ static struct list open_inodes;
+ 
+ static struct list block_cache_table;
+ static int cache_hand = 0;
+-static char zeros[BLOCK_SECTOR_SIZE];
+-static block_sector_t buf[BLOCK_ENTRIES]; //will map to the doubly indirect block
+-static block_sector_t buf2[BLOCK_ENTRIES]; //will map to individual singly indirect blocks
+-
+ 
+ /* Initializes the inode module. */
+ void
+@@ -76,39 +89,61 @@ inode_init (void)
+   }
+ }
+ 
+-static bool inode_inc_size (struct inode *curr, off_t length)
++//Allocates new blocks and zeros them. The caller of this function must adjust the size of the inode.
++static void inode_expand (struct inode *curr, int num_blocks_to_add, int old_size)
+ {
+-	if(length > 0)
++	printf("inode_expand called\n");
++	int dbl_block_index = old_size / dbl_block_size;
++  	int single_block_index = (old_size - dbl_block_index*dbl_block_size) / BLOCK_SECTOR_SIZE;
++  	block_read(fs_device,curr->dbl_indirect,buf);
++  	block_read(fs_device,byte_to_sector(curr,old_size,false),buf2);
++  	int i = single_block_index;
++  	int j = dbl_block_index;
++	while(num_blocks_to_add > 0)
+ 	{
+-		int dbl_block_size = BLOCK_ENTRIES * BLOCK_SECTOR_SIZE;  		
+-			int dbl_block_index = length / dbl_block_size;
+-			int single_block_index = (length - dbl_block_index*dbl_block_size) / BLOCK_SECTOR_SIZE;
++		i = (i + 1) % BLOCK_ENTRIES;
++		if(i == 0) 
++		{
++			block_write(fs_device,buf[j],buf2);
++			j++;
++			ASSERT(j < BLOCK_ENTRIES); //ensure that there is room in doubly indirect blocks
++			ASSERT(free_map_allocate(1,&buf[j]));
++			block_write(fs_device,buf[j],zeros);
++		}
++		ASSERT(free_map_allocate(1,&buf2[i]));
++		block_write(fs_device,buf2[i],zeros);
++		num_blocks_to_add--;
++	}
++}
+ 
+-			ASSERT(free_map_allocate(1,&curr->dbl_indirect));
+-			block_read(fs_device,curr->dbl_indirect,buf);
+-			
+-			int i;
+-			for(i = 0; i <= dbl_block_index; i++)
+-			{
+-				ASSERT(free_map_allocate(1,&buf[i]));
+-				block_read(fs_device,buf[i],buf2);
+-				
+-				int end_single_index = (i == dbl_block_index) ? single_block_index : BLOCK_ENTRIES;
+-				int j;
+-				for(j = 0; j <= end_single_index; j++)
+-				{
+-					ASSERT(free_map_allocate(1,&buf2[j]));
+-					block_write (fs_device, buf2[j], zeros);
+-				}
+-				
+-				block_write(fs_device,buf[i],buf2);
+-			}
+-			
+-			block_write(fs_device,curr->dbl_indirect,buf);
+-			curr -> length = length;
++static void inode_init_blocks (struct inode *curr, off_t length)
++{
++	ASSERT(length >= 0);
++	int dbl_block_index = length / dbl_block_size;
++	int single_block_index = (length - dbl_block_index*dbl_block_size) / BLOCK_SECTOR_SIZE;
++
++	ASSERT(free_map_allocate(1,&curr->dbl_indirect));
++	block_read(fs_device,curr->dbl_indirect,buf);
++	
++	int i;
++	for(i = 0; i <= dbl_block_index; i++)
++	{
++		ASSERT(free_map_allocate(1,&buf[i]));
++		block_read(fs_device,buf[i],buf2);
+ 		
++		int end_single_index = (i == dbl_block_index) ? single_block_index : BLOCK_ENTRIES;
++		int j;
++		for(j = 0; j <= end_single_index; j++)
++		{
++			ASSERT(free_map_allocate(1,&buf2[j]));
++			block_write (fs_device, buf2[j], zeros);
++		}
++		
++		block_write(fs_device,buf[i],buf2);
+ 	}
+-	return true;
++	
++	block_write(fs_device,curr->dbl_indirect,buf);
++	curr -> length = length;		
+ }
+ 
+ /* Initializes an inode with LENGTH bytes of data and
+@@ -119,6 +154,7 @@ static bool inode_inc_size (struct inode *curr, off_t length)
+ bool
+ inode_create (block_sector_t sector, off_t length)
+ {
++	printf("creating %d\n",sector);
+   struct inode *curr = NULL;
+ 
+   ASSERT (length >= 0);
+@@ -129,7 +165,7 @@ inode_create (block_sector_t sector, off_t length)
+       curr->length = length;
+       curr->magic = INODE_MAGIC;
+       curr->sector = sector;
+-      inode_inc_size(curr,length);
++      inode_init_blocks(curr,length);
+       block_write (fs_device, sector, curr);
+       free (curr);
+     }
+@@ -142,6 +178,7 @@ inode_create (block_sector_t sector, off_t length)
+ struct inode *
+ inode_open (block_sector_t sector)
+ {
++	printf("opening %d\n",sector);
+   struct list_elem *e;
+   struct inode *inode;
+   static char data[BLOCK_SECTOR_SIZE];
+@@ -209,6 +246,8 @@ inode_close (struct inode *inode)
+   if (inode == NULL)
+     return;
+ 
++printf("closing %d\n",inode->sector);
++
+   /* Release resources if this was the last opener. */
+   if (--inode->open_cnt == 0)
+     {
+@@ -226,7 +265,6 @@ inode_close (struct inode *inode)
+       /* Deallocate blocks if removed. */
+       if (inode->removed) 
+         {
+-			int dbl_block_size = BLOCK_ENTRIES * BLOCK_SECTOR_SIZE;
+ 			int dbl_block_index = inode->length / dbl_block_size;
+ 			int single_block_index = (inode->length - dbl_block_index*dbl_block_size) / BLOCK_SECTOR_SIZE;
+ 			
+@@ -356,7 +394,8 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
+     {
+     	uint8_t *cache = NULL;
+       /* Disk sector to read, starting byte offset within sector. */
+-      block_sector_t sector_idx = byte_to_sector (inode, offset);
++      block_sector_t sector_idx = byte_to_sector (inode, offset,false);
++      printf("byte_to_sector called from read_at with offset %d, from sector %d, returned %d\n",offset,inode->sector,sector_idx);
+       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
+ 
+       /* Bytes left in inode, bytes left in sector, lesser of the two. */
+@@ -416,7 +455,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
+     {
+     	  uint8_t *cache = NULL;
+       /* Sector to write, starting byte offset within sector. */
+-      block_sector_t sector_idx = byte_to_sector (inode, offset);
++      block_sector_t sector_idx = byte_to_sector (inode, offset,true);
+       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
+ 
+       /* Bytes left in inode, bytes left in sector, lesser of the two. */
