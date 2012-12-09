@@ -32,6 +32,7 @@ struct inode
     unsigned magic;                     /* Magic number. */
     off_t length;                       /* File size in bytes. */
     block_sector_t dbl_indirect;        /* Double indirect data sector. */
+    bool dir;
   };
 
 /* Returns the block device sector that contains byte offset POS

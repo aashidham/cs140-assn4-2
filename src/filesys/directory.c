@@ -3,8 +3,10 @@
 #include <string.h>
 #include <list.h>
 #include "filesys/filesys.h"
+#include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "threads/malloc.h"
+#include "threads/thread.h"
 
 /* A directory. */
 struct dir 
@@ -48,6 +50,7 @@ dir_open (struct inode *inode)
       return NULL; 
     }
 }
+
 
 /* Opens the root directory and returns a directory for it.
    Return true if successful, false on failure. */
@@ -177,6 +180,21 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
  done:
   return success;
 }
+
+bool dir_mkdir(char* name)
+{
+	block_sector_t inode_dir;
+	ASSERT(free_map_allocate(1,&inode_dir));
+	struct dir *curr_dir = dir_open(inode_open(thread_current()->curr_directory));
+	if(dir_create(inode_dir,0) && dir_add (curr_dir, name, inode_dir))
+		return true;
+	else
+	{
+		free_map_release(&inode_dir,1);
+		return false;
+	}
+}
+
 
 /* Removes any entry for NAME in DIR.
    Returns true if successful, false on failure,
