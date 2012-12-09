@@ -7,6 +7,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
+#include "threads/interrupt.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
@@ -88,13 +89,15 @@ static void inode_expand (struct inode *curr, int new_size, int old_size)
 	if(old_size == 0) inode_init_blocks(curr,new_size);
 	else
 	{
+		static block_sector_t buf[BLOCK_ENTRIES] = {0};
+		static block_sector_t buf2[BLOCK_ENTRIES] = {0};
 		int dbl_block_size = BLOCK_ENTRIES * BLOCK_SECTOR_SIZE;
-		int num_blocks_to_add = (new_size - old_size) / BLOCK_SECTOR_SIZE;
+		int num_blocks_to_add = (new_size / BLOCK_SECTOR_SIZE) - (old_size / BLOCK_SECTOR_SIZE);
 		int last_old_elem = old_size -1;
 		int dbl_block_index = last_old_elem / dbl_block_size;
 		int single_block_index = (last_old_elem - dbl_block_index*dbl_block_size) / BLOCK_SECTOR_SIZE;
 		block_read(fs_device,curr->dbl_indirect,buf);
-		block_read(fs_device,byte_to_sector(curr,last_old_elem),buf2);
+		block_read(fs_device,buf[dbl_block_index],buf2);
 		int i = single_block_index;
 		int j = dbl_block_index;
 		while(num_blocks_to_add > 0)
@@ -106,9 +109,11 @@ static void inode_expand (struct inode *curr, int new_size, int old_size)
 				j++;
 				ASSERT(j < BLOCK_ENTRIES); //ensure that there is room in doubly indirect blocks
 				ASSERT(free_map_allocate(1,&buf[j]));
+				block_write(fs_device,curr->dbl_indirect,buf);
 				block_write(fs_device,buf[j],zeros);
 			}
 			ASSERT(free_map_allocate(1,&buf2[i]));
+			block_write(fs_device,buf[j],buf2);
 			block_write(fs_device,buf2[i],zeros);
 			num_blocks_to_add--;
 		}
@@ -250,6 +255,12 @@ inode_close (struct inode *inode)
   /* Ignore null pointer. */
   if (inode == NULL)
     return;
+    
+		   static char data[BLOCK_SECTOR_SIZE];
+		   memcpy(data,inode,sizeof(*inode));
+		   intr_enable();
+		   block_write(fs_device,inode->sector,data);	
+
 
   /* Release resources if this was the last opener. */
   if (--inode->open_cnt == 0)
@@ -261,10 +272,11 @@ inode_close (struct inode *inode)
         	printf("(in close) open_inode entry is %d\n",curr->sector);
         }
         printf("\n");*/
-
+        
       /* Remove from inode list and release lock. */
       list_remove (&inode->elem);
- 
+
+
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
@@ -394,13 +406,13 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
   uint8_t *buffer = buffer_;
   off_t bytes_read = 0;
   
-  //printf("inode %d with length %d reading %d bytes from offset %d\n",inode->sector,inode->length,size,offset);
 
   while (size > 0) 
     {
     	uint8_t *cache = NULL;
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode,offset);
+ 	 //printf("inode %d with length %d reading %d bytes from offset %d from data block %d\n",inode->sector,inode->length,size,offset,sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -455,7 +467,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   if (inode->deny_write_cnt)
     return 0;
    
-   //printf("inode %d with length %d writing %d bytes to offset %d\n",inode->sector,inode->length,size,offset);
+   
   if(size + offset > inode->length)
   {
   	inode_expand(inode,size + offset,inode->length);
@@ -466,6 +478,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     	  uint8_t *cache = NULL;
       /* Sector to write, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      //printf("inode %d with length %d writing %d bytes to offset %d in data block %d\n",inode->sector,inode->length,size,offset,sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
