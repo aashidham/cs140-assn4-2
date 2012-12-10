@@ -140,6 +140,7 @@ dir_lookup (const struct dir *dir, const char *name,
 //Returns -1 on failing to parse the pathname.
 int dir_used_pathname(const char* pathname)
 {
+	//printf("dir_used_pathname called on %s\n",pathname);
   struct dir* curr;
   if (pathname == NULL||pathname[0] == '\0')
   {
@@ -181,6 +182,7 @@ or -1 on failure.
 */
 int dir_new_pathname(const char* pathname, char* filename)
 {
+	//printf("dir_new_pathname called on %s\n",pathname);
 	char* pch = strrchr(pathname,'/');
 	if(!pch) 
 	{
@@ -206,7 +208,8 @@ int dir_new_pathname(const char* pathname, char* filename)
 		if(strlen(file) > NAME_MAX) return -1;
 		strlcpy(filename,file,strlen(file)+1);
 		
-		return dir_used_pathname(pathname2);
+		if(index == 0) return dir_used_pathname("/");
+		else return dir_used_pathname(pathname2);
 	}
 }
 
@@ -268,9 +271,16 @@ bool dir_mkdir(char* name)
 {
 	block_sector_t inode_dir;
 	ASSERT(free_map_allocate(1,&inode_dir));
-	struct dir *curr_dir = dir_open(inode_open(thread_current()->curr_directory));
-	if(dir_create(inode_dir,0) && dir_add (curr_dir, name, inode_dir))
+	
+	static char filename[NAME_MAX + 1];
+  	int dir_inode = dir_new_pathname(name, filename);
+  	if(dir_inode == -1) return false;
+  	struct dir *dir = dir_open (inode_open(dir_inode));
+	
+	if(dir_create(inode_dir,0) && dir_add (dir, filename, inode_dir))
+	{
 		return true;
+	}
 	else
 	{
 		free_map_release(inode_dir,1);
