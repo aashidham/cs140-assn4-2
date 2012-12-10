@@ -46,11 +46,15 @@ bool
 filesys_create (const char *name, off_t initial_size) 
 {
   block_sector_t inode_sector = 0;
-  struct dir *dir = dir_open_root ();
+  static char filename[NAME_MAX + 1];
+  int dir_inode = dir_new_pathname(name, filename);
+  if(dir_inode == -1) return false;
+  struct dir *dir = dir_open (inode_open(dir_inode));
+  //printf("in filesys_create with %d dir_inode and %s filename\n",dir_inode,filename);
   bool success = (dir != NULL
                   && free_map_allocate (1, &inode_sector)
                   && inode_create (inode_sector, initial_size)
-                  && dir_add (dir, name, inode_sector));
+                  && dir_add (dir, filename, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
   dir_close (dir);
@@ -66,11 +70,14 @@ filesys_create (const char *name, off_t initial_size)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  static char filename[NAME_MAX + 1];
+  int dir_inode = dir_new_pathname(name, filename);
+  if(dir_inode == -1) return false;
+  struct dir *dir = dir_open (inode_open(dir_inode));
   struct inode *inode = NULL;
 
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, filename, &inode);
   dir_close (dir);
 
   return file_open (inode);

@@ -21,20 +21,6 @@ static block_sector_t buf2[BLOCK_ENTRIES]; //will map to individual singly indir
 static void inode_expand (struct inode *curr, int num_blocks_to_add, int old_size);
 static void inode_init_blocks (struct inode *curr, off_t length);
 
-/* In-memory inode. */
-struct inode 
-  {
-    struct list_elem elem;              /* Element in inode list. */
-    block_sector_t sector;              /* Sector number of disk location. */
-    int open_cnt;                       /* Number of openers. */
-    bool removed;                       /* True if deleted, false otherwise. */
-    int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-    unsigned magic;                     /* Magic number. */
-    off_t length;                       /* File size in bytes. */
-    block_sector_t dbl_indirect;        /* Double indirect data sector. */
-    bool dir;
-  };
-
 /* Returns the block device sector that contains byte offset POS
    within INODE.
    Returns -1 if INODE does not contain data for a byte at offset

@@ -5,6 +5,7 @@
 #include "filesys/filesys.h"
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
+#include "devices/block.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
 
@@ -135,6 +136,80 @@ dir_lookup (const struct dir *dir, const char *name,
   return *inode != NULL;
 }
 
+
+//Returns -1 on failing to parse the pathname.
+int dir_used_pathname(const char* pathname)
+{
+  struct dir* curr;
+  if (pathname == NULL||pathname[0] == '\0')
+  {
+  	return -1;
+  }
+  if(pathname[0] == '/')
+  {
+  	curr = dir_open_root();
+  }
+  else
+  {
+  	curr = dir_open(inode_open(thread_current()->curr_directory));
+  }
+  char *token, *save_ptr;
+  char* pathname2 = malloc(strlen(pathname) + 1);
+  strlcpy(pathname2,pathname,strlen(pathname) + 1);
+  for (token = strtok_r (pathname2, "/", &save_ptr); token != NULL; token = strtok_r (NULL, "/", &save_ptr))
+  {
+  	struct inode *inode;
+	if(!dir_lookup(curr,token,&inode)) 
+	{
+		return -1;
+	}
+	else
+	{
+		dir_close(curr);
+		curr = dir_open(inode);
+	}
+  }
+  block_sector_t ret_val = curr->inode->sector;
+  dir_close(curr);
+  return ret_val;
+}
+
+/*
+writes the 'new' portion of the given PATHNAME to FILENAME, which is supplied
+by the callee. Returns the inode of the enclosing directory of FILENAME
+or -1 on failure.
+*/
+int dir_new_pathname(const char* pathname, char* filename)
+{
+	char* pch = strrchr(pathname,'/');
+	if(!pch) 
+	{
+		if(strlen(pathname) > NAME_MAX) return -1;
+		strlcpy(filename,pathname,strlen(pathname)+1);
+		return thread_current()->curr_directory;
+	}
+	else
+	{
+		//make sure pch didn't find trailing slash
+		ASSERT(pch != pathname + strlen(pathname)-1);
+				
+		//copy const pathname to modify it
+		char* pathname2 = malloc(strlen(pathname)+1);
+		strlcpy(pathname2,pathname,strlen(pathname)+1);
+		
+		//set found '/' to 0, to split into pathname2 and file
+		int index = pch - pathname;
+		pathname2[index] = '\0';
+		char* file = pathname2+index+1;
+		
+		//make sure filename isn't too long
+		if(strlen(file) > NAME_MAX) return -1;
+		strlcpy(filename,file,strlen(file)+1);
+		
+		return dir_used_pathname(pathname2);
+	}
+}
+
 /* Adds a file named NAME to DIR, which must not already contain a
    file by that name.  The file's inode is in sector
    INODE_SECTOR.
@@ -181,6 +256,14 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   return success;
 }
 
+bool dir_chdir(char* name)
+{
+	int new_dir_inode = dir_used_pathname(name);
+	if(new_dir_inode == -1) return false;
+	thread_current()->curr_directory = new_dir_inode;
+	return true;
+}
+
 bool dir_mkdir(char* name)
 {
 	block_sector_t inode_dir;
@@ -190,7 +273,7 @@ bool dir_mkdir(char* name)
 		return true;
 	else
 	{
-		free_map_release(&inode_dir,1);
+		free_map_release(inode_dir,1);
 		return false;
 	}
 }

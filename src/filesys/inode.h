@@ -8,6 +8,21 @@
 
 struct bitmap;
 
+/* In-memory inode. */
+struct inode 
+  {
+    struct list_elem elem;              /* Element in inode list. */
+    block_sector_t sector;              /* Sector number of disk location. */
+    int open_cnt;                       /* Number of openers. */
+    bool removed;                       /* True if deleted, false otherwise. */
+    int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    unsigned magic;                     /* Magic number. */
+    off_t length;                       /* File size in bytes. */
+    block_sector_t dbl_indirect;        /* Double indirect data sector. */
+    bool dir;
+  };
+
+
 void inode_init (void);
 bool inode_create (block_sector_t, off_t);
 struct inode *inode_open (block_sector_t);

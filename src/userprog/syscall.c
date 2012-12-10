@@ -122,7 +122,7 @@ bool check_filename(const char *file)
 {
 	if(!check_pointer((void *)file))
 		exit(-1);
-	return (strlen(file)>0)&&(strlen(file)<15);
+	return (strlen(file)>0);
 }
 
 /* returns of the file_pointer represented by fd. */
@@ -164,7 +164,9 @@ struct file_elem * get_file_element(int fd)
 bool create (const char *file, unsigned initial_size)
 {
 	if(!check_filename(file))
+	{	
 		return false;
+	}
 	return filesys_create(file, initial_size);
 }
 
@@ -319,6 +321,7 @@ void close (int fd)
 bool chdir (const char *dir)
 {
 	//printf("%s in chdir!\n",dir);
+	return dir_chdir(dir);
 }
 
 bool mkdir (const char *dir)
@@ -329,17 +332,17 @@ bool mkdir (const char *dir)
 
 bool readdir (int fd, char *name)
 {
-	//printf("in readdir!\n");
+	ASSERT(false);
 }
 
 bool isdir (int fd)
 {
-	//printf("in isdir!\n");
+	ASSERT(false);
 }
 
 int inumber (int fd)
 {
-	//printf("in inumber!\n");
+	ASSERT(false);
 }
 
 void
