@@ -13,6 +13,7 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/directory.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #define min(a,b)	(a>b)?b:a
@@ -35,6 +36,13 @@ int num_args[]	=
 	2,	/* Change position in a file. */
 	1,	/* Report current position in a file. */
 	1,	/* Close a file. */
+	0,
+	0,
+	1,  /* chdir */
+	1,  /* mkdir */
+	2,  /* readdir */
+	1,  /* isdir */
+	1,  /* inumber */
 };
 
 /* utility functions */
@@ -308,6 +316,31 @@ void close (int fd)
 	free(ele);
 }
 
+bool chdir (const char *dir)
+{
+	//printf("%s in chdir!\n",dir);
+}
+
+bool mkdir (const char *dir)
+{
+	//printf("%s in mkdir!\n",dir);
+	return dir_mkdir(dir);
+}
+
+bool readdir (int fd, char *name)
+{
+	//printf("in readdir!\n");
+}
+
+bool isdir (int fd)
+{
+	//printf("in isdir!\n");
+}
+
+int inumber (int fd)
+{
+	//printf("in inumber!\n");
+}
 
 void
 syscall_init (void) 
@@ -355,6 +388,11 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case 11:	f->eax=tell((int)arguments[0]);											return;
 
 		case 12:	close((int)arguments[0]);												return;
+		case 15: 	f->eax=chdir((const char *)arguments[0]);								return;
+		case 16: 	f->eax=mkdir((const char *)arguments[0]);								return;
+		case 17: 	f->eax=readdir((int)arguments[0],(const char *)arguments[1]);			return;
+		case 18: 	f->eax=isdir((int)arguments[0]);										return;
+		case 19: 	f->eax=inumber((int)arguments[0]);										return;
 		default:	break;
 	};
 	exit(-1);
