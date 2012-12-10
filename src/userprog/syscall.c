@@ -13,6 +13,7 @@
 #include "userprog/process.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "filesys/directory.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
@@ -227,6 +228,8 @@ int write (int fd, const void *buffer, unsigned size)
 	/* write to the file indicated by the file descriptor. */
 	struct file *f=get_file_pointer(fd);
 	if(!f)
+		return -1;
+	if(f->inode->dir)
 		return -1;
 	return file_write (f,buffer,size);
 	//printf("write here\n");

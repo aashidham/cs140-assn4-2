@@ -151,7 +151,7 @@ static void inode_init_blocks (struct inode *curr, off_t length)
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
 bool
-inode_create (block_sector_t sector, off_t length)
+inode_create (block_sector_t sector, off_t length, bool dir)
 {
   struct inode *curr = NULL;
 
@@ -163,6 +163,7 @@ inode_create (block_sector_t sector, off_t length)
       curr->length = length;
       curr->magic = INODE_MAGIC;
       curr->sector = sector;
+      curr->dir = dir;
       inode_init_blocks(curr,length);
       block_write (fs_device, sector, curr);
       free (curr);
