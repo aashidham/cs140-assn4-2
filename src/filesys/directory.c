@@ -24,12 +24,21 @@ struct dir_entry
     bool in_use;                        /* In use or free? */
   };
 
+bool dir_add (struct dir *dir, const char *name, block_sector_t inode_sector);
+
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  bool to_return = inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  if(sector == ROOT_DIR_SECTOR && to_return)
+  {
+  	struct dir* dir = dir_open(inode_open(sector));
+  	dir_add(dir,".",ROOT_DIR_SECTOR);
+  	dir_add(dir,"..",ROOT_DIR_SECTOR);
+  }
+  return to_return;
 }
 
 /* Opens and returns the directory for the given INODE, of which
@@ -104,6 +113,7 @@ lookup (const struct dir *dir, const char *name,
 
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
+       printf("lookup found %s pointing to sector %d\n",e.name,e.inode_sector);
     if (e.in_use && !strcmp (name, e.name)) 
       {
         if (ep != NULL)
@@ -206,8 +216,10 @@ int dir_new_pathname(const char* pathname, char* filename)
 		
 		//make sure filename isn't too long
 		if(strlen(file) > NAME_MAX) return -1;
-		strlcpy(filename,file,strlen(file)+1);
-		
+		if(strlen(file) == 0)
+			strlcpy(filename,".",strlen(".")+1);
+		else
+			strlcpy(filename,filename,strlen(filename)+1);
 		if(index == 0) return dir_used_pathname("/");
 		else return dir_used_pathname(pathname2);
 	}
@@ -279,6 +291,9 @@ bool dir_mkdir(char* name)
 	
 	if(dir_create(inode_dir,0) && dir_add (dir, filename, inode_dir))
 	{
+		struct dir* created_dir = dir_open(inode_open(inode_dir));
+		dir_add(created_dir,".",inode_dir);
+		dir_add(created_dir,"..",dir_inode);
 		return true;
 	}
 	else

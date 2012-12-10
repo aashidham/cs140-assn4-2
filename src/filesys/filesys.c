@@ -75,7 +75,7 @@ filesys_open (const char *name)
   if(dir_inode == -1) return false;
   struct dir *dir = dir_open (inode_open(dir_inode));
   struct inode *inode = NULL;
-
+  printf("filename in open() call is %s\n",filename);
   if (dir != NULL)
     dir_lookup (dir, filename, &inode);
   dir_close (dir);
