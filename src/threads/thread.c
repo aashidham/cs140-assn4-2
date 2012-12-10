@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "threads/malloc.h"
+#include "filesys/filesys.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -490,6 +491,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->child_list);
   list_init (&t->file_list);
   list_push_back (&all_list, &t->allelem);
+  ASSERT(t->curr_directory == 0);
+  t->curr_directory = ROOT_DIR_SECTOR;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

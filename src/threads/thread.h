@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include <threads/synch.h>
+#include "devices/block.h"
 #define	PROCESS_INITIALIZING	1
 #define	PROCESS_STARTED			2
 #define	PROCESS_EXITED			3
@@ -120,6 +121,7 @@ struct thread
 	*/
 	struct lock status_change_lock;	
 	struct condition status_change;
+	block_sector_t curr_directory;
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
