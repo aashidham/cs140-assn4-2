@@ -6,6 +6,7 @@
 #include "filesys/free-map.h"
 #include "filesys/inode.h"
 #include "filesys/directory.h"
+#include "threads/thread.h"
 
 /* Partition that contains the file system. */
 struct block *fs_device;
@@ -92,8 +93,13 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
+  static char filename[NAME_MAX + 1];
+  int dir_inode = dir_new_pathname(name, filename);
+  if(dir_inode == -1 || dir_inode == ROOT_DIR_SECTOR) return false;
+
+  struct dir *dir = dir_open (inode_open(dir_inode));
+  
+  bool success = dir != NULL && dir_remove (dir, filename);
   dir_close (dir); 
 
   return success;

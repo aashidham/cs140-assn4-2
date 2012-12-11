@@ -99,7 +99,7 @@ dir_get_inode (struct dir *dir)
 
 void dir_print(const struct dir *dir)
 {
-	return;
+  return;
   struct dir_entry e;
   size_t ofs;
   printf("in inode %d:\n",dir->inode->sector);
@@ -290,6 +290,9 @@ bool dir_chdir(char* name)
 	int new_dir_inode = dir_used_pathname(name);
 	if(new_dir_inode == -1) return false;
 	thread_current()->curr_directory = new_dir_inode;
+	struct dir* end_dir = dir_open(inode_open(new_dir_inode));
+	dir_print(end_dir);
+	dir_close(end_dir);
 	return true;
 }
 
@@ -371,7 +374,8 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
     {
       dir->pos += sizeof e;
-      if (e.in_use)
+      bool real_dir = strcmp (e.name, "..") && strcmp (e.name, ".");
+      if ((e.in_use) && real_dir)
         {
           strlcpy (name, e.name, NAME_MAX + 1);
           return true;

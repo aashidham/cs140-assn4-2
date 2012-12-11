@@ -179,6 +179,11 @@ bool remove (const char *file)
 	struct file *f=filesys_open(file);
 	if(!f)
 		return false;
+	struct list_elem *e;
+	for (e = list_begin(&thread_current()->file_list); e != list_end(&thread_current()->file_list); e = list_next (e))
+	{
+		if(list_entry(e, struct file_elem, elem)->inode==f->inode->sector) return false;
+	}
 	file_close(f);
 	return filesys_remove(file);
 }
@@ -199,6 +204,7 @@ int open (const char *file)
 	thread_current()->FD_CURRENT++;
 	temp->fd=id;
 	temp->file_pointer=f;
+	temp->inode  = f->inode->sector;
 	
 	/* push the file element object into the current thread's file_list. */
 	list_push_back(&thread_current()->file_list,&temp->elem);
@@ -335,12 +341,12 @@ bool mkdir (const char *dir)
 
 bool readdir (int fd, char *name)
 {
-	ASSERT(false);
 	struct file *f=get_file_pointer(fd);
 	if(!f || !f->inode->dir)
 		return false;
 	struct dir* dir = dir_open(f->inode);
 	bool to_return = dir_readdir(dir,name);
+	dir_close(dir);
 	return to_return;
 }
 
@@ -351,7 +357,8 @@ bool isdir (int fd)
 
 int inumber (int fd)
 {
-	ASSERT(false);
+	struct file *f=get_file_pointer(fd);
+	return f->inode->sector;
 }
 
 void

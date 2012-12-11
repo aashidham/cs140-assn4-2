@@ -9,5 +9,6 @@ struct file_elem
 	int fd;
 	struct file *file_pointer;
 	struct list_elem elem;
+	int inode;
 };
 #endif /* userprog/syscall.h */
