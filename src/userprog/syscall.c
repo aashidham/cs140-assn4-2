@@ -336,6 +336,12 @@ bool mkdir (const char *dir)
 bool readdir (int fd, char *name)
 {
 	ASSERT(false);
+	struct file *f=get_file_pointer(fd);
+	if(!f || !f->inode->dir)
+		return false;
+	struct dir* dir = dir_open(f->inode);
+	bool to_return = dir_readdir(dir,name);
+	return to_return;
 }
 
 bool isdir (int fd)

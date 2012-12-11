@@ -57,6 +57,7 @@ filesys_create (const char *name, off_t initial_size)
                   && dir_add (dir, filename, inode_sector));
   if (!success && inode_sector != 0) 
     free_map_release (inode_sector, 1);
+  if(success) dir_print(dir);
   dir_close (dir);
 
   return success;
@@ -75,11 +76,12 @@ filesys_open (const char *name)
   if(dir_inode == -1) return false;
   struct dir *dir = dir_open (inode_open(dir_inode));
   struct inode *inode = NULL;
-  printf("filename in open() call is %s\n",filename);
+  //printf("filename in open() call is %s\n",filename);
   if (dir != NULL)
     dir_lookup (dir, filename, &inode);
+  dir_print(dir);
   dir_close (dir);
-
+  //printf("found inode %d, about to open it...\n",inode->sector);
   return file_open (inode);
 }
 

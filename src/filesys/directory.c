@@ -37,6 +37,7 @@ dir_create (block_sector_t sector, size_t entry_cnt)
   	struct dir* dir = dir_open(inode_open(sector));
   	dir_add(dir,".",ROOT_DIR_SECTOR);
   	dir_add(dir,"..",ROOT_DIR_SECTOR);
+  	dir_close(dir);
   }
   return to_return;
 }
@@ -96,6 +97,19 @@ dir_get_inode (struct dir *dir)
   return dir->inode;
 }
 
+void dir_print(const struct dir *dir)
+{
+	return;
+  struct dir_entry e;
+  size_t ofs;
+  printf("in inode %d:\n",dir->inode->sector);
+  for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e; ofs += sizeof e) 
+  {
+	  printf("found %s pointing to %d\n",e.name,e.inode_sector);
+  }
+  printf("\n");
+}
+
 /* Searches DIR for a file with the given NAME.
    If successful, returns true, sets *EP to the directory entry
    if EP is non-null, and sets *OFSP to the byte offset of the
@@ -110,10 +124,9 @@ lookup (const struct dir *dir, const char *name,
   
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
-
   for (ofs = 0; inode_read_at (dir->inode, &e, sizeof e, ofs) == sizeof e;
        ofs += sizeof e) 
-       printf("lookup found %s pointing to sector %d\n",e.name,e.inode_sector);
+    {
     if (e.in_use && !strcmp (name, e.name)) 
       {
         if (ep != NULL)
@@ -122,6 +135,7 @@ lookup (const struct dir *dir, const char *name,
           *ofsp = ofs;
         return true;
       }
+    }
   return false;
 }
 
@@ -203,7 +217,7 @@ int dir_new_pathname(const char* pathname, char* filename)
 	else
 	{
 		//make sure pch didn't find trailing slash
-		ASSERT(pch != pathname + strlen(pathname)-1);
+		//ASSERT(pch != pathname + strlen(pathname)-1);
 				
 		//copy const pathname to modify it
 		char* pathname2 = malloc(strlen(pathname)+1);
@@ -219,7 +233,7 @@ int dir_new_pathname(const char* pathname, char* filename)
 		if(strlen(file) == 0)
 			strlcpy(filename,".",strlen(".")+1);
 		else
-			strlcpy(filename,filename,strlen(filename)+1);
+			strlcpy(filename,file,strlen(file)+1);
 		if(index == 0) return dir_used_pathname("/");
 		else return dir_used_pathname(pathname2);
 	}
@@ -285,20 +299,25 @@ bool dir_mkdir(char* name)
 	ASSERT(free_map_allocate(1,&inode_dir));
 	
 	static char filename[NAME_MAX + 1];
-  	int dir_inode = dir_new_pathname(name, filename);
-  	if(dir_inode == -1) return false;
-  	struct dir *dir = dir_open (inode_open(dir_inode));
+  	int paren_inode = dir_new_pathname(name, filename);
+  	if(paren_inode == -1) return false;
+  	struct dir *dir = dir_open (inode_open(paren_inode));
 	
 	if(dir_create(inode_dir,0) && dir_add (dir, filename, inode_dir))
 	{
 		struct dir* created_dir = dir_open(inode_open(inode_dir));
 		dir_add(created_dir,".",inode_dir);
-		dir_add(created_dir,"..",dir_inode);
+		dir_add(created_dir,"..",paren_inode);
+		dir_print(dir);
+		dir_print(created_dir);
+		dir_close(created_dir);
+		dir_close(dir);
 		return true;
 	}
 	else
 	{
 		free_map_release(inode_dir,1);
+		dir_close(dir);
 		return false;
 	}
 }
